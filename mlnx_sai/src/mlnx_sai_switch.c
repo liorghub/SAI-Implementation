@@ -7846,18 +7846,19 @@ sai_status_t mlnx_switch_get_mac(sx_mac_addr_t *mac)
         break;
     }
 
+    /* If no ports in the system, return value from DB. Otherwise, return value from SDK to verify alignment
+     * (64/128 and not full byte). */
     if (!first_port) {
-        SX_LOG_ERR("Failed to get switch mac - first port not found\n");
-        return SAI_STATUS_FAILURE;
+        memcpy(mac, &g_sai_db_ptr->base_mac_addr, sizeof(*mac));
+    } else {
+        /* Use switch first port, and zero down lower 6/7 bits port part (64/128 ports) */
+        status = sx_api_port_phys_addr_get(gh_sdk, first_port->logical, mac);
+        if (SX_ERR(status)) {
+            SX_LOG_ERR("Failed to get port %x address - %s.\n", first_port->logical, SX_STATUS_MSG(status));
+            return sdk_to_sai(status);
+        }
+        mac->ether_addr_octet[5] &= mlnx_port_mac_mask_get();
     }
-
-    /* Use switch first port, and zero down lower 6 bits port part (64 ports) */
-    status = sx_api_port_phys_addr_get(gh_sdk, first_port->logical, mac);
-    if (SX_ERR(status)) {
-        SX_LOG_ERR("Failed to get port %x address - %s.\n", first_port->logical, SX_STATUS_MSG(status));
-        return sdk_to_sai(status);
-    }
-    mac->ether_addr_octet[5] &= mlnx_port_mac_mask_get();
 
     return SAI_STATUS_SUCCESS;
 }
